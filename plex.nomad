@@ -87,7 +87,7 @@ EOH
         
         check {
           type     = "http"
-          path     = "/web"
+          path     = "/identity"
           interval = "30s"
           timeout  = "10s"
         }
