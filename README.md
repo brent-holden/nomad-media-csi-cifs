@@ -112,8 +112,9 @@ A bash script that:
 
 4. Set up Plex Nomad variables (if running Plex):
    ```bash
-   nomad var put nomad/jobs/plex claim_token="your-claim-token" version="latest"
+   nomad var put nomad/jobs/plex claim_token="<YOUR-CLAIM-TOKEN>" version="latest"
    ```
+   See [Finding an authentication token](https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/) for how to obtain your claim token.
 
 5. Deploy a media server (choose one):
    ```bash
