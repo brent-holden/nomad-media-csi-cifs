@@ -18,6 +18,8 @@ This setup uses a **controller-based deployment model**:
 
 - **Controller** (macOS workstation at `localhost`) - Runs Ansible and Nomad CLI commands
 - **Target** (Linux server at `192.168.0.10`) - Runs Consul, Nomad, and containers
+  - Secondary NIC on `10.100.0.0/30` network for NAS connectivity
+  - Mounts SMB/CIFS shares from NAS at `10.100.0.1`
 
 The controller uses `NOMAD_ADDR` to submit jobs to the remote Nomad cluster.
 
