@@ -102,7 +102,7 @@ ansible-playbook -i inventory.ini site.yml -e enable_backups=false
 
 | Job | Description |
 |-----|-------------|
-| `plex.nomad` | Plex Media Server with GPU transcoding, media mount, and Consul health checks |
+| `plex.nomad` | Plex Media Server with optional GPU transcoding, media mount, and Consul health checks |
 | `jellyfin.nomad` | Jellyfin Media Server with media mount and Consul health checks |
 
 ### Periodic Jobs
@@ -160,7 +160,7 @@ If not using Ansible, deploy in this order:
 
 4. **Deploy media server:**
    ```bash
-   # Plex
+   # Plex (requires /dev/dri for GPU transcoding, or edit the job file)
    nomad job run jobs/services/plex.nomad
    nomad job run jobs/periodic/update-plex.nomad
    nomad job run jobs/periodic/backup-plex.nomad
@@ -170,6 +170,8 @@ If not using Ansible, deploy in this order:
    nomad job run jobs/periodic/update-jellyfin.nomad
    nomad job run jobs/periodic/backup-jellyfin.nomad
    ```
+
+   > **Note:** The static `plex.nomad` includes GPU passthrough. For hosts without `/dev/dri`, use ansible with `-e plex_gpu_transcoding=false` or manually remove the `devices` line from the job file.
 
 ## Manual Infrastructure Setup
 
@@ -226,4 +228,5 @@ If not using Ansible, complete the following on each node:
 - The SMB share is mounted with UID 1002 and GID 1001 to match the Plex user
 - Timezone is set to America/New_York for all scheduled jobs
 - Backups are stored for 14 days before automatic cleanup
+- GPU transcoding for Plex requires `/dev/dri` on the host; disable with `plex_gpu_transcoding=false` for software transcoding
 - **Performance Warning:** Running both Plex and Jellyfin simultaneously against the same CIFS/SMB mount point may cause performance issues. It is recommended to run only one media server at a time.
