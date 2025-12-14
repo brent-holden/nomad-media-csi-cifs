@@ -1,6 +1,8 @@
 #!/bin/bash
 
 # Fetch Plex version and update Nomad variable
+# This script is embedded in jobs/system/update-plex-version.nomad
+# Requires: curl, jq, nomad CLI
 set -e
 
 echo "Fetching Plex version from API..."
@@ -13,7 +15,10 @@ fi
 
 echo "Extracted Plex version: $PLEX_VERSION"
 
+# Get existing claim token (set this or use the Nomad variable)
+EXISTING_TOKEN="${PLEX_CLAIM_TOKEN:-claim-XXXXX}"
+
 echo "Writing version to Nomad variable..."
-nomad var put -force nomad/jobs/plex claim_token="claim-XXXXX" version="$PLEX_VERSION"
+nomad var put -force nomad/jobs/plex claim_token="$EXISTING_TOKEN" version="$PLEX_VERSION"
 
 echo "Successfully updated Nomad variable nomad/jobs/plex with version: $PLEX_VERSION"

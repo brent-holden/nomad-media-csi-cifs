@@ -5,7 +5,7 @@ job "update-plex-version" {
 
   # Run daily at 3am
   periodic {
-    cron             = "0 3 * * *"
+    crons            = ["0 3 * * *"]
     prohibit_overlap = true
   }
 
@@ -16,37 +16,48 @@ job "update-plex-version" {
       driver = "podman"
 
       config {
-        image = "docker.io/hashicorp/nomad:latest"
-        args  = ["/bin/sh", "-c", "/local/update-plex-version.sh"]
+        image = "docker.io/debian:bookworm-slim"
+        args  = ["/bin/bash", "/local/update-plex-version.sh"]
       }
 
-      # Embedded script that preserves the existing claim token
+      # Script based on scripts/update-plex-version.sh, using nomad CLI
       template {
         data = <<EOF
-#!/bin/sh
+#!/bin/bash
 set -e
 
-echo "Fetching Plex version from API..."
-PLEX_VERSION=$(wget -qO- "https://plex.tv/api/downloads/5.json?channel=plexpass" | \
-  sed -n 's/.*"version":"\([^"]*\)".*/\1/p' | head -1)
+# Install required tools
+echo "Installing curl, jq, and unzip..."
+apt-get update -qq && apt-get install -y -qq curl jq unzip > /dev/null
 
-if [ -z "$PLEX_VERSION" ]; then
+echo "Fetching Plex version from API..."
+PLEX_VERSION=$(curl -s "https://plex.tv/api/downloads/5.json?channel=plexpass" | jq -r '.computer.Linux.version')
+
+if [ -z "$PLEX_VERSION" ] || [ "$PLEX_VERSION" = "null" ]; then
     echo "Error: Failed to extract Plex version from API response"
     exit 1
 fi
 
 echo "Extracted Plex version: $PLEX_VERSION"
 
-# Get existing claim token from Nomad variable
-EXISTING_TOKEN={{- with nomadVar "nomad/jobs/plex" -}}{{ .claim_token }}{{- end }}
+# Get existing claim token from Nomad variable (rendered by template)
+EXISTING_TOKEN="{{- with nomadVar "nomad/jobs/plex" -}}{{ .claim_token }}{{- end -}}"
 
 if [ -z "$EXISTING_TOKEN" ]; then
-    echo "Error: No existing claim token found in nomad/jobs/plex"
-    exit 1
+    echo "Warning: No existing claim token found, using placeholder"
+    EXISTING_TOKEN="claim-XXXXX"
 fi
 
-echo "Writing version to Nomad variable (preserving claim token)..."
-nomad var put -force nomad/jobs/plex claim_token="$EXISTING_TOKEN" version="$PLEX_VERSION"
+# Fetch and install latest Nomad CLI
+echo "Fetching latest Nomad version..."
+NOMAD_VERSION=$(curl -s https://checkpoint-api.hashicorp.com/v1/check/nomad | jq -r '.current_version')
+echo "Installing Nomad $NOMAD_VERSION..."
+curl -sL "https://releases.hashicorp.com/nomad/${NOMAD_VERSION}/nomad_${NOMAD_VERSION}_linux_amd64.zip" -o /tmp/nomad.zip
+unzip -q /tmp/nomad.zip -d /tmp/
+chmod +x /tmp/nomad
+
+echo "Writing version to Nomad variable..."
+/tmp/nomad var put -force nomad/jobs/plex claim_token="$EXISTING_TOKEN" version="$PLEX_VERSION"
 
 echo "Successfully updated Nomad variable nomad/jobs/plex with version: $PLEX_VERSION"
 EOF
@@ -59,8 +70,8 @@ EOF
       }
 
       resources {
-        cpu    = 100
-        memory = 128
+        cpu    = 200
+        memory = 256
       }
     }
   }
