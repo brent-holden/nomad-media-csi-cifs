@@ -1,0 +1,64 @@
+---
+# Deploy media server using Nomad Pack
+#
+# This playbook deploys either Plex or Jellyfin based on the media_server variable.
+#
+# Usage:
+#   Deploy Plex (default):    ansible-playbook -i inventory.ini playbooks/deploy-media-server.yml
+#   Deploy Jellyfin:          ansible-playbook -i inventory.ini playbooks/deploy-media-server.yml -e media_server=jellyfin
+#   Without GPU transcoding:  ansible-playbook -i inventory.ini playbooks/deploy-media-server.yml -e media_server_gpu_transcoding=false
+
+- name: Deploy Media Server
+  hosts: nomad_servers[0]
+  gather_facts: false
+  tasks:
+    - name: Validate media_server value
+      ansible.builtin.assert:
+        that:
+          - media_server in ['plex', 'jellyfin']
+        fail_msg: "media_server must be 'plex' or 'jellyfin'. Got: {{ media_server }}"
+        success_msg: "Deploying media server: {{ media_server }}"
+
+    - name: Check if Nomad Pack registry exists
+      ansible.builtin.command:
+        cmd: nomad-pack registry list
+      register: registry_list
+      changed_when: false
+      failed_when: false
+
+    - name: Add Nomad Pack registry
+      ansible.builtin.command:
+        cmd: nomad-pack registry add {{ nomad_pack_registry_name }} {{ nomad_pack_registry_url }}
+      when: nomad_pack_registry_name not in registry_list.stdout
+      register: registry_add
+      changed_when: "'added' in registry_add.stdout"
+
+    - name: Build nomad-pack variables
+      ansible.builtin.set_fact:
+        pack_vars: >-
+          -var gpu_transcoding={{ media_server_gpu_transcoding | lower }}
+          -var enable_backup={{ media_server_enable_backup | lower }}
+          -var enable_update={{ media_server_enable_update | lower }}
+
+    - name: Deploy {{ media_server }} with Nomad Pack
+      ansible.builtin.command:
+        cmd: nomad-pack run {{ media_server }} --registry={{ nomad_pack_registry_name }} {{ pack_vars }}
+      register: pack_result
+      changed_when: "'deployed' in pack_result.stdout or 'Plan' in pack_result.stdout"
+
+    - name: Display deployment result
+      ansible.builtin.debug:
+        var: pack_result.stdout_lines
+
+    - name: Verify job is running
+      ansible.builtin.command:
+        cmd: nomad job status {{ media_server }}
+      register: job_status
+      until: "'running' in job_status.stdout"
+      retries: 30
+      delay: 5
+      changed_when: false
+
+    - name: Display job status
+      ansible.builtin.debug:
+        msg: "{{ media_server }} is now running. Access at http://<nomad-client-ip>:{{ '32400' if media_server == 'plex' else '8096' }}"

@@ -1,6 +1,6 @@
 # Nomad CIFS/SMB CSI Infrastructure
 
-This repository contains Ansible playbooks for setting up a CIFS/SMB CSI (Container Storage Interface) plugin on HashiCorp Nomad. It provides the infrastructure foundation for running containerized applications with shared network storage.
+This repository contains Ansible playbooks for setting up a CIFS/SMB CSI (Container Storage Interface) plugin on HashiCorp Nomad and deploying media servers (Plex or Jellyfin).
 
 ## Overview
 
@@ -10,22 +10,21 @@ The setup deploys:
 - **CIFS CSI Plugin** - Controller and node plugins for mounting SMB/CIFS network shares
 - **CSI Volumes** - Pre-configured volumes for media and backup storage
 - **Host Volumes** - Local directories for application configuration
+- **Media Server** - Plex or Jellyfin via Nomad Pack
 
 ## Quick Start
 
-1. Configure your fileserver credentials in `ansible/group_vars/all.yml`
+1. Configure your settings in `ansible/group_vars/all.yml`
 2. Update `ansible/inventory.ini` with your hosts
 3. Run the ansible playbook:
    ```bash
    cd ansible
-   ansible-playbook -i inventory.ini site.yml
-   ```
 
-4. Deploy applications using [nomad-media-packs](https://github.com/brent-holden/nomad-media-packs):
-   ```bash
-   nomad-pack registry add media github.com/brent-holden/nomad-media-packs
-   nomad-pack run plex --registry=media
-   nomad-pack run jellyfin --registry=media
+   # Deploy with Plex (default)
+   ansible-playbook -i inventory.ini site.yml
+
+   # Deploy with Jellyfin
+   ansible-playbook -i inventory.ini site.yml -e media_server=jellyfin
    ```
 
 ## Configuration
@@ -39,6 +38,17 @@ fileserver_media_share: "media"
 fileserver_backup_share: "backups"
 fileserver_username: "plex"
 fileserver_password: "<YOUR-PASSWORD>"
+```
+
+### Media Server Selection
+```yaml
+# Choose one: "plex" or "jellyfin"
+media_server: "plex"
+
+# Pack options
+media_server_gpu_transcoding: true
+media_server_enable_backup: true
+media_server_enable_update: true
 ```
 
 ### CSI Plugin Settings
@@ -61,17 +71,36 @@ jellyfin_config_dir: "/opt/jellyfin/config"
 jellyfin_cache_dir: "/opt/jellyfin/cache"
 ```
 
+## Runtime Overrides
+
+Override configuration at runtime:
+
+```bash
+# Deploy Jellyfin instead of Plex
+ansible-playbook -i inventory.ini site.yml -e media_server=jellyfin
+
+# Deploy without GPU transcoding
+ansible-playbook -i inventory.ini site.yml -e media_server_gpu_transcoding=false
+
+# Deploy without backup jobs
+ansible-playbook -i inventory.ini site.yml -e media_server_enable_backup=false
+
+# Combine options
+ansible-playbook -i inventory.ini site.yml -e media_server=jellyfin -e media_server_gpu_transcoding=false
+```
+
 ## Directory Structure
 
 ```
 ansible/
 ├── group_vars/
-│   └── all.yml                  # Configuration variables
+│   └── all.yml                  # All configuration variables
 ├── playbooks/
 │   ├── configure-consul.yml
 │   ├── configure-nomad.yml
 │   ├── deploy-csi-plugins.yml   # Deploys CSI controller and node plugins
 │   ├── deploy-csi-volumes.yml   # Registers CSI volumes
+│   ├── deploy-media-server.yml  # Deploys media server via Nomad Pack
 │   ├── disable-firewall.yml
 │   ├── install-consul.yml
 │   ├── install-nomad.yml
@@ -104,6 +133,7 @@ ansible/
 | `setup-directories.yml` | Creates host volume directories |
 | `deploy-csi-plugins.yml` | Deploys CSI controller and node plugins |
 | `deploy-csi-volumes.yml` | Registers CSI volumes for media and backups |
+| `deploy-media-server.yml` | Deploys Plex or Jellyfin via Nomad Pack |
 
 ## CSI Plugins
 
@@ -116,16 +146,12 @@ The playbooks deploy two CSI plugin jobs:
 
 ## CSI Volumes
 
-The playbooks configure two CSI volumes:
-
 | Volume | Purpose |
 |--------|---------|
 | `media-drive` | Shared media library (movies, TV shows, music) |
 | `backup-drive` | Backup storage for application configurations |
 
 ## Host Volumes
-
-Host volumes are configured for application-specific persistent storage:
 
 | Volume | Path | Purpose |
 |--------|------|---------|
@@ -134,87 +160,51 @@ Host volumes are configured for application-specific persistent storage:
 | `jellyfin-config` | `/opt/jellyfin/config` | Jellyfin configuration and database |
 | `jellyfin-cache` | `/opt/jellyfin/cache` | Jellyfin cache storage |
 
+## Media Server Features
+
+Both Plex and Jellyfin are deployed with:
+
+| Feature | Description | Variable |
+|---------|-------------|----------|
+| GPU Transcoding | Hardware-accelerated transcoding via `/dev/dri` | `media_server_gpu_transcoding` |
+| Backup Job | Daily backup of configuration (2am) | `media_server_enable_backup` |
+| Update Job | Daily version check (3am) | `media_server_enable_update` |
+
+## Switching Media Servers
+
+To switch from one media server to another:
+
+1. Stop the current media server:
+   ```bash
+   nomad job stop plex   # or jellyfin
+   ```
+
+2. Deploy the new media server:
+   ```bash
+   ansible-playbook -i inventory.ini playbooks/deploy-media-server.yml -e media_server=jellyfin
+   ```
+
 ## Manual Infrastructure Setup
 
-If not using Ansible, complete the following on each node:
+If not using Ansible for infrastructure, see the templates in `ansible/templates/` for configuration examples.
 
-1. **Install Consul** from [HashiCorp's repository](https://developer.hashicorp.com/consul/install)
-
-2. **Configure and start Consul** (see `ansible/templates/consul.hcl.j2`):
-   ```bash
-   sudo mkdir -p /opt/consul/data
-   sudo chown -R consul:consul /opt/consul
-   sudo systemctl enable --now consul
-   ```
-
-3. **Install Nomad** from [HashiCorp's repository](https://developer.hashicorp.com/nomad/install)
-
-4. **Install Podman**:
-   ```bash
-   sudo dnf install -y podman   # RHEL/CentOS
-   sudo apt install -y podman   # Debian/Ubuntu
-   sudo systemctl enable --now podman.socket
-   ```
-
-5. **Install nomad-driver-podman**:
-   ```bash
-   sudo dnf install -y nomad-driver-podman   # RHEL/CentOS
-   sudo apt install -y nomad-driver-podman   # Debian/Ubuntu
-   sudo mkdir -p /opt/nomad/plugins
-   sudo ln -s /usr/bin/nomad-driver-podman /opt/nomad/plugins/
-   ```
-
-6. **Create host volume directories**:
-   ```bash
-   # For Plex
-   sudo groupadd -g 1001 plex
-   sudo useradd -u 1002 -g plex -s /sbin/nologin -M plex
-   sudo mkdir -p /opt/plex/config /opt/plex/transcode
-   sudo chown -R plex:plex /opt/plex
-
-   # For Jellyfin
-   sudo mkdir -p /opt/jellyfin/config /opt/jellyfin/cache
-   ```
-
-7. **Configure Nomad** using templates from `ansible/templates/`
-
-8. **Start Nomad**:
-   ```bash
-   sudo systemctl enable --now nomad
-   ```
-
-9. **Deploy CSI plugins** (generate from templates or use ansible):
-   ```bash
-   ansible-playbook -i inventory.ini playbooks/deploy-csi-plugins.yml
-   ```
-
-10. **Register CSI volumes**:
-    ```bash
-    ansible-playbook -i inventory.ini playbooks/deploy-csi-volumes.yml
-    ```
-
-## Deploying Media Servers
-
-After the infrastructure is set up, use [nomad-media-packs](https://github.com/brent-holden/nomad-media-packs) to deploy media servers:
+After infrastructure is set up, you can still use the media server playbook:
 
 ```bash
-# Add the registry
+ansible-playbook -i inventory.ini playbooks/deploy-media-server.yml
+```
+
+Or deploy manually with Nomad Pack:
+
+```bash
 nomad-pack registry add media github.com/brent-holden/nomad-media-packs
-
-# Deploy Plex (with GPU transcoding, backup, and update jobs)
-nomad-pack run plex --registry=media
-
-# Deploy Jellyfin (with GPU transcoding, backup, and update jobs)
-nomad-pack run jellyfin --registry=media
-
-# View available options
-nomad-pack info plex --registry=media
-nomad-pack info jellyfin --registry=media
+nomad-pack run plex --registry=media -var gpu_transcoding=true
 ```
 
 ## Notes
 
 - All configuration is managed through `ansible/group_vars/all.yml`
+- Only one media server (Plex or Jellyfin) can be deployed at a time
 - The SMB share is mounted with UID 1002 and GID 1001 to match the Plex user
-- Host volumes provide persistent local storage for application configuration
-- CSI volumes enable shared network storage across multiple nodes
+- GPU transcoding requires `/dev/dri` on the host
+- Nomad Pack is required on the Nomad server for media server deployment

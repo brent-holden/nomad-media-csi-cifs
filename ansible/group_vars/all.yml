@@ -36,3 +36,15 @@ csi_controller_cpu: 512
 csi_controller_memory: 512
 csi_node_cpu: 512
 csi_node_memory: 512
+
+# Media server selection: "plex" or "jellyfin"
+media_server: "plex"
+
+# Nomad Pack registry configuration
+nomad_pack_registry_name: "media"
+nomad_pack_registry_url: "github.com/brent-holden/nomad-media-packs"
+
+# Media server pack variables (passed to nomad-pack)
+media_server_gpu_transcoding: true
+media_server_enable_backup: true
+media_server_enable_update: true
