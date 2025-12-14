@@ -1,10 +1,23 @@
 ---
-# Playbook to install HashiCorp Nomad on CentOS Stream 10 or Ubuntu 25.10
+# Playbook to install HashiCorp Nomad on CentOS Stream 10, Ubuntu 25.10, or macOS
 - name: Install HashiCorp Nomad
   hosts: nomad
-  become: true
+  become: "{{ ansible_os_family != 'Darwin' }}"
 
   tasks:
+    # macOS tasks (using Homebrew)
+    - name: Tap HashiCorp repository (macOS)
+      community.general.homebrew_tap:
+        name: hashicorp/tap
+        state: present
+      when: ansible_os_family == "Darwin"
+
+    - name: Install Nomad via Homebrew (macOS)
+      community.general.homebrew:
+        name: hashicorp/tap/nomad
+        state: latest
+      when: ansible_os_family == "Darwin"
+
     # CentOS/RHEL tasks
     - name: Install required packages (RHEL)
       ansible.builtin.dnf:
@@ -61,7 +74,7 @@
         update_cache: true
       when: ansible_os_family == "Debian"
 
-    # Common tasks
+    # Common tasks (Linux only - macOS uses Homebrew-managed paths)
     - name: Create Nomad data directory
       ansible.builtin.file:
         path: "{{ nomad_data_dir }}"
@@ -69,6 +82,7 @@
         owner: nomad
         group: nomad
         mode: "0755"
+      when: ansible_os_family != "Darwin"
 
     - name: Create Nomad plugin directory
       ansible.builtin.file:
@@ -77,6 +91,7 @@
         owner: nomad
         group: nomad
         mode: "0755"
+      when: ansible_os_family != "Darwin"
 
     - name: Create Nomad config directory
       ansible.builtin.file:
@@ -85,3 +100,4 @@
         owner: root
         group: root
         mode: "0755"
+      when: ansible_os_family != "Darwin"

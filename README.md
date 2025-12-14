@@ -138,13 +138,13 @@ ansible/
 | `disable-firewall.yml` | Disables firewalld (RHEL) or ufw (Debian) |
 | `install-consul.yml` | Installs Consul from HashiCorp repository |
 | `configure-consul.yml` | Deploys Consul server configuration |
-| `install-nomad.yml` | Installs Nomad from HashiCorp repository |
+| `install-nomad.yml` | Installs Nomad from HashiCorp repository (Linux) or Homebrew (macOS) |
 | `configure-nomad.yml` | Deploys Nomad server and client configuration |
 | `install-podman-driver.yml` | Installs Podman and nomad-driver-podman |
 | `setup-directories.yml` | Creates host volume directories |
 | `deploy-csi-plugins.yml` | Deploys CSI controller and node plugins |
 | `deploy-csi-volumes.yml` | Registers CSI volumes for media and backups |
-| `deploy-media-server.yml` | Deploys Plex or Jellyfin via Nomad Pack |
+| `deploy-media-server.yml` | Deploys Plex or Jellyfin via Nomad Pack (auto-installs via Homebrew on macOS) |
 
 ## CSI Plugins
 
@@ -218,9 +218,17 @@ The `deploy-media-server.yml` playbook automatically handles software dependenci
 
 | Prerequisite | Handled By |
 |--------------|------------|
-| Podman | `install-podman-driver.yml` (fails if not installed when run standalone) |
-| Nomad Pack | `deploy-media-server.yml` (auto-installs if missing) |
-| unzip | `deploy-media-server.yml` (auto-installs for Nomad Pack extraction) |
+| Podman | `install-podman-driver.yml` (fails if not installed when run standalone; skipped on macOS) |
+| Nomad Pack | `deploy-media-server.yml` (auto-installs via Homebrew on macOS, direct download on Linux) |
+| unzip | `deploy-media-server.yml` (auto-installs for Nomad Pack extraction on Linux) |
+
+### macOS Support
+
+When running on macOS, the playbooks use Homebrew with the HashiCorp tap (`hashicorp/tap`) to install:
+- `hashicorp/tap/nomad` - Nomad CLI
+- `hashicorp/tap/nomad-pack` - Nomad Pack CLI
+
+macOS is typically used as a controller to deploy jobs to remote Nomad clusters, so Podman checks are skipped.
 
 ## Notes
 

@@ -20,18 +20,19 @@
         fail_msg: "media_server must be 'plex' or 'jellyfin'. Got: {{ media_server }}"
         success_msg: "Deploying media server: {{ media_server }}"
 
-    # Check prerequisites
+    # Check prerequisites (skip Podman check on macOS - used as controller only)
     - name: Check if Podman is installed
       ansible.builtin.command:
         cmd: podman --version
       register: podman_check
       changed_when: false
       failed_when: false
+      when: ansible_os_family != "Darwin"
 
     - name: Fail if Podman is not installed
       ansible.builtin.fail:
         msg: "Podman is not installed. Run the full site.yml playbook or install-podman-driver.yml first."
-      when: podman_check.rc != 0
+      when: ansible_os_family != "Darwin" and podman_check.rc != 0
 
     - name: Check if Nomad Pack is installed
       ansible.builtin.command:
@@ -43,21 +44,40 @@
     - name: Install Nomad Pack if not present
       when: nomad_pack_check.rc != 0
       block:
+        # macOS installation via Homebrew
+        - name: Tap HashiCorp repository (macOS)
+          community.general.homebrew_tap:
+            name: hashicorp/tap
+            state: present
+          when: ansible_os_family == "Darwin"
+          become: false
+
+        - name: Install Nomad Pack via Homebrew (macOS)
+          community.general.homebrew:
+            name: hashicorp/tap/nomad-pack
+            state: latest
+          when: ansible_os_family == "Darwin"
+          become: false
+
+        # Linux installation via direct download
         - name: Get latest Nomad Pack version
           ansible.builtin.uri:
             url: https://api.github.com/repos/hashicorp/nomad-pack/releases/latest
             return_content: true
           register: nomad_pack_release
+          when: ansible_os_family != "Darwin"
 
         - name: Set Nomad Pack version
           ansible.builtin.set_fact:
             nomad_pack_version: "{{ nomad_pack_release.json.tag_name | regex_replace('^v', '') }}"
+          when: ansible_os_family != "Darwin"
 
         - name: Download Nomad Pack
           ansible.builtin.get_url:
             url: "https://releases.hashicorp.com/nomad-pack/{{ nomad_pack_version }}/nomad-pack_{{ nomad_pack_version }}_linux_amd64.zip"
             dest: /tmp/nomad-pack.zip
             mode: '0644'
+          when: ansible_os_family != "Darwin"
 
         - name: Install unzip if not present (Debian/Ubuntu)
           ansible.builtin.apt:
@@ -77,6 +97,7 @@
             dest: /usr/local/bin/
             remote_src: true
             mode: '0755'
+          when: ansible_os_family != "Darwin"
 
         - name: Verify Nomad Pack installation
           ansible.builtin.command:
@@ -92,6 +113,7 @@
           ansible.builtin.file:
             path: /tmp/nomad-pack.zip
             state: absent
+          when: ansible_os_family != "Darwin"
 
     # Deploy media server
     - name: Check if Nomad Pack registry exists
