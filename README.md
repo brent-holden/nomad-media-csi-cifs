@@ -58,7 +58,7 @@ Edit `ansible/group_vars/all.yml` to configure your deployment:
 fileserver_ip: "10.100.0.1"
 fileserver_media_share: "media"
 fileserver_backup_share: "backups"
-fileserver_username: "plex"
+fileserver_username: "<YOUR-USERNAME>"
 fileserver_password: "<YOUR-PASSWORD>"
 ```
 
