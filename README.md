@@ -231,21 +231,24 @@ nomad-pack run plex --registry=media -var gpu_transcoding=true
 
 ## Software Dependencies
 
-The `deploy-media-server.yml` playbook automatically handles software dependencies:
+### Controller (macOS)
 
-| Prerequisite | Handled By |
-|--------------|------------|
-| Podman | `install-podman-driver.yml` (fails if not installed when run standalone; skipped on macOS) |
-| Nomad Pack | `deploy-media-server.yml` (auto-installs via Homebrew on macOS, direct download on Linux) |
-| unzip | `deploy-media-server.yml` (auto-installs for Nomad Pack extraction on Linux) |
+The playbooks automatically install CLI tools on the controller via Homebrew:
 
-### macOS Support
+| Tool | Installed By | Purpose |
+|------|--------------|---------|
+| Nomad CLI | `install-nomad.yml` | Submit jobs to remote Nomad cluster |
+| Nomad Pack | `deploy-media-server.yml` | Deploy media server packs |
 
-When running on macOS, the playbooks use Homebrew with the HashiCorp tap (`hashicorp/tap`) to install:
-- `hashicorp/tap/nomad` - Nomad CLI
-- `hashicorp/tap/nomad-pack` - Nomad Pack CLI
+Both are installed from `hashicorp/tap` (e.g., `hashicorp/tap/nomad`).
 
-macOS is typically used as a controller to deploy jobs to remote Nomad clusters, so Podman checks are skipped.
+### Target Server (Linux)
+
+| Prerequisite | Installed By |
+|--------------|--------------|
+| Consul | `install-consul.yml` |
+| Nomad | `install-nomad.yml` |
+| Podman | `install-podman-driver.yml` |
 
 ## Notes
 
@@ -253,4 +256,4 @@ macOS is typically used as a controller to deploy jobs to remote Nomad clusters,
 - Only one media server (Plex or Jellyfin) can be deployed at a time
 - The SMB share is mounted with UID 1002 and GID 1001 to match the Plex user
 - GPU transcoding requires `/dev/dri` on the host
-- Nomad Pack is automatically installed on the Nomad server if not present
+- CLI tools are installed locally; services run on the remote server
