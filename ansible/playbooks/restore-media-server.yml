@@ -20,7 +20,7 @@
 
     - name: Check if restore job exists
       ansible.builtin.command:
-        cmd: nomad job status restore-{{ media_server }}
+        cmd: nomad job status {{ media_server }}-restore
       environment:
         NOMAD_ADDR: "{{ nomad_addr }}"
       register: restore_job_check
@@ -30,7 +30,7 @@
     - name: Fail if restore job not deployed
       ansible.builtin.fail:
         msg: |
-          The restore-{{ media_server }} job is not deployed.
+          The {{ media_server }}-restore job is not deployed.
           Deploy with enable_restore=true first:
             ansible-playbook -i inventory.ini playbooks/deploy-media-server.yml -e media_server_enable_restore=true
       when: restore_job_check.rc != 0
@@ -64,7 +64,7 @@
         dispatch_cmd: >-
           nomad job dispatch
           {{ '-meta backup_date=' + backup_date if backup_date is defined else '' }}
-          restore-{{ media_server }}
+          {{ media_server }}-restore
 
     - name: Dispatch restore job
       ansible.builtin.command:

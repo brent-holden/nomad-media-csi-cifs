@@ -1,0 +1,184 @@
+---
+# Deploy *arr stack services using Nomad Pack
+#
+# This playbook deploys the media automation stack:
+#   - Radarr (movie management)
+#   - Sonarr (TV series management)
+#   - Lidarr (music management)
+#   - Prowlarr (indexer management)
+#   - Overseerr (request management)
+#   - Tautulli (Plex monitoring)
+#
+# Usage:
+#   Deploy all services:
+#     ansible-playbook -i inventory.ini playbooks/deploy-arr-stack.yml
+#
+#   Deploy specific services:
+#     ansible-playbook -i inventory.ini playbooks/deploy-arr-stack.yml -e "arr_services=['radarr','sonarr']"
+#
+#   Without backups:
+#     ansible-playbook -i inventory.ini playbooks/deploy-arr-stack.yml -e arr_enable_backup=false
+
+- name: Deploy *arr Stack
+  hosts: controller
+  gather_facts: true
+  vars:
+    # Default list of services to deploy
+    arr_services:
+      - radarr
+      - sonarr
+      - lidarr
+      - prowlarr
+      - overseerr
+      - tautulli
+    # Pack variables
+    arr_enable_backup: true
+    arr_enable_update: true
+  tasks:
+    - name: Validate arr_services
+      ansible.builtin.assert:
+        that:
+          - arr_services | length > 0
+          - arr_services | difference(['radarr', 'sonarr', 'lidarr', 'prowlarr', 'overseerr', 'tautulli']) | length == 0
+        fail_msg: "arr_services must contain valid service names: radarr, sonarr, lidarr, prowlarr, overseerr, tautulli"
+        success_msg: "Will deploy services: {{ arr_services | join(', ') }}"
+
+    # Check Nomad Pack is installed
+    - name: Check if Nomad Pack is installed
+      ansible.builtin.command:
+        cmd: nomad-pack version
+      register: nomad_pack_check
+      changed_when: false
+      failed_when: false
+
+    - name: Install Nomad Pack if not present
+      when: nomad_pack_check.rc != 0
+      block:
+        - name: Tap HashiCorp repository
+          community.general.homebrew_tap:
+            name: hashicorp/tap
+            state: present
+
+        - name: Install Nomad Pack via Homebrew
+          community.general.homebrew:
+            name: hashicorp/tap/nomad-pack
+            state: latest
+
+    # Ensure registry is configured
+    - name: Check if Nomad Pack registry exists
+      ansible.builtin.command:
+        cmd: nomad-pack registry list
+      environment:
+        NOMAD_ADDR: "{{ nomad_addr }}"
+      register: registry_list
+      changed_when: false
+      failed_when: false
+
+    - name: Add Nomad Pack registry
+      ansible.builtin.command:
+        cmd: nomad-pack registry add {{ nomad_pack_registry_name }} {{ nomad_pack_registry_url }}
+      environment:
+        NOMAD_ADDR: "{{ nomad_addr }}"
+      when: nomad_pack_registry_name not in registry_list.stdout
+      register: registry_add
+      changed_when: "'added' in registry_add.stdout"
+
+    # Create host volumes for each service
+    - name: Create host volumes for *arr services
+      ansible.builtin.shell: |
+        nomad volume create - <<'EOF'
+        name      = "{{ item }}-config"
+        type      = "host"
+        plugin_id = "mkdir"
+        capability {
+          access_mode     = "single-node-multi-writer"
+          attachment_mode = "file-system"
+        }
+        parameters {
+          mode = "0755"
+          uid  = "{{ user_uid }}"
+          gid  = "{{ group_gid }}"
+        }
+        EOF
+      environment:
+        NOMAD_ADDR: "{{ nomad_addr }}"
+      loop: "{{ arr_services }}"
+      register: host_volumes
+      changed_when: "'Created' in host_volumes.stdout"
+      failed_when: false
+
+    - name: Display host volume results
+      ansible.builtin.debug:
+        msg: "{{ item.item }}-config: {{ 'created' if 'Created' in item.stdout else 'already exists or failed' }}"
+      loop: "{{ host_volumes.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    # Build pack variables
+    - name: Set pack variables
+      ansible.builtin.set_fact:
+        pack_vars: >-
+          --var enable_backup={{ arr_enable_backup | lower }}
+          --var enable_update={{ arr_enable_update | lower }}
+
+    # Deploy each service
+    - name: Deploy *arr services with Nomad Pack
+      ansible.builtin.command:
+        cmd: nomad-pack run --registry={{ nomad_pack_registry_name }} {{ pack_vars }} {{ item }}
+      environment:
+        NOMAD_ADDR: "{{ nomad_addr }}"
+      loop: "{{ arr_services }}"
+      register: pack_results
+      changed_when: "'deployed' in pack_results.stdout or 'Plan' in pack_results.stdout"
+
+    - name: Display deployment results
+      ansible.builtin.debug:
+        msg: "{{ item.item }}: {{ 'deployed' if item.rc == 0 else 'failed' }}"
+      loop: "{{ pack_results.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    # Verify all jobs are running
+    - name: Wait for services to start
+      ansible.builtin.command:
+        cmd: nomad job status {{ item }}
+      environment:
+        NOMAD_ADDR: "{{ nomad_addr }}"
+      loop: "{{ arr_services }}"
+      register: job_status
+      until: "'running' in job_status.stdout"
+      retries: 30
+      delay: 5
+      changed_when: false
+
+    - name: Display service URLs
+      ansible.builtin.debug:
+        msg: |
+          *arr stack deployed successfully!
+
+          Service URLs:
+          {% if 'radarr' in arr_services %}
+            - Radarr:    http://192.168.0.10:7878
+          {% endif %}
+          {% if 'sonarr' in arr_services %}
+            - Sonarr:    http://192.168.0.10:8989
+          {% endif %}
+          {% if 'lidarr' in arr_services %}
+            - Lidarr:    http://192.168.0.10:8686
+          {% endif %}
+          {% if 'prowlarr' in arr_services %}
+            - Prowlarr:  http://192.168.0.10:9696
+          {% endif %}
+          {% if 'overseerr' in arr_services %}
+            - Overseerr: http://192.168.0.10:5055
+          {% endif %}
+          {% if 'tautulli' in arr_services %}
+            - Tautulli:  http://192.168.0.10:8181
+          {% endif %}
+
+          Next steps:
+            1. Configure Prowlarr with your indexers
+            2. Add Prowlarr to Radarr/Sonarr/Lidarr (Settings → Indexers)
+            3. Configure download clients in each *arr app
+            4. Connect Overseerr to Plex and Radarr/Sonarr
+            5. Connect Tautulli to Plex

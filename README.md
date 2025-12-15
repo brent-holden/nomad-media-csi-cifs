@@ -1,6 +1,6 @@
 # Nomad Media Server Infrastructure
 
-Ansible playbooks for deploying a complete media server infrastructure on HashiCorp Nomad with Plex or Jellyfin.
+Ansible playbooks for deploying a complete media server infrastructure on HashiCorp Nomad with Plex or Jellyfin, plus the full *arr stack for media automation.
 
 ## Overview
 
@@ -11,6 +11,7 @@ This repository provides automated deployment of:
 - **CIFS/SMB CSI Plugin** - Network storage for media libraries via SMB/CIFS shares
 - **Dynamic Host Volumes** - Nomad-managed local storage using the `mkdir` plugin (Nomad 1.10+)
 - **Media Server** - Plex or Jellyfin deployed via Nomad Pack
+- **Media Automation** - Radarr, Sonarr, Lidarr, Prowlarr, Overseerr, Tautulli
 
 ## Architecture
 
@@ -28,8 +29,8 @@ This repository provides automated deployment of:
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────────┐  │
 │  │   Consul    │  │    Nomad    │  │   Podman Containers     │  │
 │  └─────────────┘  └─────────────┘  │  - Plex/Jellyfin        │  │
-│                                     │  - CSI Plugins          │  │
-│  ┌─────────────────────────────────┐│  - Backup/Update Jobs   │  │
+│                                     │  - Radarr/Sonarr/etc    │  │
+│  ┌─────────────────────────────────┐│  - CSI Plugins          │  │
 │  │  Secondary NIC (10.100.0.0/30)  │└─────────────────────────┘  │
 │  │  └─► NAS at 10.100.0.1          │                             │
 │  │      - /media (SMB share)       │                             │
@@ -46,7 +47,7 @@ Configure your NAS with SMB/CIFS shares:
 
 | Share | Purpose |
 |-------|---------|
-| `/media` | Media library (movies, TV shows, music) |
+| `/media` | Media library (movies, TV shows, music, downloads) |
 | `/backups` | Backup storage for application configurations |
 
 ### Software Requirements
@@ -64,26 +65,42 @@ Configure your NAS with SMB/CIFS shares:
 
 1. **Configure settings:**
    ```bash
-   # Edit ansible/group_vars/all.yml with your NAS credentials and settings
+   cd ansible
+   cp group_vars/all.yml.example group_vars/all.yml
+   # Edit group_vars/all.yml with your NAS credentials and settings
    ```
 
 2. **Deploy everything:**
    ```bash
-   cd ansible
    ansible-playbook -i inventory.ini site.yml
    ```
 
-3. **Access your media server:**
-   - Plex: http://192.168.0.10:32400
-   - Jellyfin: http://192.168.0.10:8096
+3. **Deploy the *arr stack:**
+   ```bash
+   ansible-playbook -i inventory.ini playbooks/deploy-arr-stack.yml
+   ```
+
+4. **Access your services:**
+
+   | Service | URL |
+   |---------|-----|
+   | Plex | http://192.168.0.10:32400 |
+   | Jellyfin | http://192.168.0.10:8096 |
+   | Radarr | http://192.168.0.10:7878 |
+   | Sonarr | http://192.168.0.10:8989 |
+   | Lidarr | http://192.168.0.10:8686 |
+   | Prowlarr | http://192.168.0.10:9696 |
+   | Overseerr | http://192.168.0.10:5055 |
+   | Tautulli | http://192.168.0.10:8181 |
 
 ## Playbooks
 
 | Playbook | Description |
 |----------|-------------|
-| `site.yml` | Main playbook - deploys complete infrastructure |
-| `deploy-media-server.yml` | Deploy/redeploy media server only |
-| `restore-media-server.yml` | Restore configuration from backup |
+| `site.yml` | Main playbook - deploys complete infrastructure and media server |
+| `deploy-media-server.yml` | Deploy/redeploy Plex or Jellyfin only |
+| `deploy-arr-stack.yml` | Deploy *arr services (Radarr, Sonarr, etc.) |
+| `restore-media-server.yml` | Restore media server configuration from backup |
 | `deploy-csi-plugins.yml` | Deploy CSI controller and node plugins |
 | `deploy-csi-volumes.yml` | Register CSI volumes |
 | `setup-users.yml` | Create users/groups for media server |
@@ -102,7 +119,29 @@ ansible-playbook -i inventory.ini site.yml -e media_server_gpu_transcoding=false
 
 # Deploy without backup jobs
 ansible-playbook -i inventory.ini site.yml -e media_server_enable_backup=false
+
+# Redeploy media server only (after initial setup)
+ansible-playbook -i inventory.ini playbooks/deploy-media-server.yml
 ```
+
+### Deploying the *arr Stack
+
+The `deploy-arr-stack.yml` playbook deploys all media automation services:
+
+```bash
+# Deploy all *arr services
+ansible-playbook -i inventory.ini playbooks/deploy-arr-stack.yml
+
+# Deploy specific services only
+ansible-playbook -i inventory.ini playbooks/deploy-arr-stack.yml \
+  -e "arr_services=['radarr','sonarr','prowlarr']"
+
+# Deploy without backup jobs
+ansible-playbook -i inventory.ini playbooks/deploy-arr-stack.yml \
+  -e arr_enable_backup=false
+```
+
+**Available services:** `radarr`, `sonarr`, `lidarr`, `prowlarr`, `overseerr`, `tautulli`
 
 ### Restoring from Backup
 
@@ -122,7 +161,7 @@ The restore playbook:
 3. Waits for restore to complete
 4. Restarts the media server
 
-**Note:** The `restore-plex` or `restore-jellyfin` job must be deployed first. Set `media_server_enable_restore=true` (enabled by default).
+**Note:** The `plex-restore` or `jellyfin-restore` job must be deployed first. Set `media_server_enable_restore=true` (enabled by default).
 
 ## Configuration
 
@@ -189,7 +228,7 @@ CSI volumes provide access to network shares via the SMB/CIFS CSI plugin:
 
 | Volume | Purpose | Mount Path |
 |--------|---------|------------|
-| `media-drive` | Media library | `/media` |
+| `media-drive` | Media library and downloads | `/media` |
 | `backup-drive` | Backup storage | `/backups` |
 
 ### Dynamic Host Volumes (Local Storage)
@@ -208,21 +247,79 @@ When jobs request host volumes, Nomad creates them on-demand with the specified 
 |--------|---------|------------|
 | `plex-config` | Plex configuration and database | `deploy-media-server.yml` |
 | `jellyfin-config` | Jellyfin configuration and database | `deploy-media-server.yml` |
+| `radarr-config` | Radarr configuration and database | `deploy-arr-stack.yml` |
+| `sonarr-config` | Sonarr configuration and database | `deploy-arr-stack.yml` |
+| `lidarr-config` | Lidarr configuration and database | `deploy-arr-stack.yml` |
+| `prowlarr-config` | Prowlarr configuration and database | `deploy-arr-stack.yml` |
+| `overseerr-config` | Overseerr configuration and database | `deploy-arr-stack.yml` |
+| `tautulli-config` | Tautulli configuration and database | `deploy-arr-stack.yml` |
 
-**Access Mode:** Host volumes are created with `single-node-multi-writer` access mode, which allows the backup and restore jobs to access the config volume while the main media server is running.
+**Access Mode:** Host volumes are created with `single-node-multi-writer` access mode, which allows the backup and restore jobs to access the config volume while the main service is running.
 
 ## Jobs Deployed
 
-When you run `site.yml`, the following Nomad jobs are created:
+### Media Server Jobs
 
 | Job | Type | Description |
 |-----|------|-------------|
 | `cifs-csi-plugin-controller` | service | CSI volume lifecycle management |
 | `cifs-csi-plugin-node` | system | Mounts CSI volumes on nodes |
 | `plex` or `jellyfin` | service | Media server |
-| `backup-plex` or `backup-jellyfin` | batch/periodic | Daily backup at 2am |
-| `update-plex` or `update-jellyfin` | batch/periodic | Daily version check at 3am |
-| `restore-plex` or `restore-jellyfin` | batch/parameterized | Manual restore job |
+| `plex-backup` or `jellyfin-backup` | batch/periodic | Daily backup at 2am |
+| `plex-update` or `jellyfin-update` | batch/periodic | Daily version check at 3am |
+| `plex-restore` or `jellyfin-restore` | batch/parameterized | Manual restore job |
+
+### *arr Stack Jobs
+
+Each *arr service creates multiple jobs:
+
+| Service | Main Job | Backup Job | Update Job |
+|---------|----------|------------|------------|
+| Radarr | `radarr` | `radarr-backup` | `radarr-update` |
+| Sonarr | `sonarr` | `sonarr-backup` | `sonarr-update` |
+| Lidarr | `lidarr` | `lidarr-backup` | `lidarr-update` |
+| Prowlarr | `prowlarr` | `prowlarr-backup` | `prowlarr-update` |
+| Overseerr | `overseerr` | `overseerr-backup` | `overseerr-update` |
+| Tautulli | `tautulli` | `tautulli-backup` | `tautulli-update` |
+
+## *arr Stack Setup
+
+After deploying the *arr stack, configure the services to work together:
+
+### Recommended Configuration Order
+
+1. **Prowlarr** - Configure indexers first
+2. **Radarr/Sonarr/Lidarr** - Add Prowlarr as indexer source
+3. **Overseerr** - Connect to Plex and Radarr/Sonarr
+4. **Tautulli** - Connect to Plex
+
+### Service Connections
+
+| Service | Connects To | Configuration Path |
+|---------|-------------|-------------------|
+| Prowlarr | Radarr, Sonarr, Lidarr | Settings → Apps |
+| Radarr | Prowlarr, Download Client | Settings → Indexers, Settings → Download Clients |
+| Sonarr | Prowlarr, Download Client | Settings → Indexers, Settings → Download Clients |
+| Lidarr | Prowlarr, Download Client | Settings → Indexers, Settings → Download Clients |
+| Overseerr | Plex, Radarr, Sonarr | Settings → Plex, Settings → Radarr/Sonarr |
+| Tautulli | Plex | Settings → Plex Media Server |
+
+### Media Path Configuration
+
+All *arr apps mount the media volume at `/media`. Configure root folders as:
+
+| Service | Root Folder | Download Path |
+|---------|-------------|---------------|
+| Radarr | `/media/movies` | `/media/downloads/complete/movies` |
+| Sonarr | `/media/tv` | `/media/downloads/complete/tv` |
+| Lidarr | `/media/music` | `/media/downloads/complete/music` |
+
+### API Keys
+
+Each *arr app generates an API key on first run. Find it at:
+- **Settings → General → Security → API Key**
+
+You'll need these API keys when connecting services (e.g., adding Radarr to Prowlarr or Overseerr).
 
 ## Directory Structure
 
@@ -236,6 +333,7 @@ ansible/
 ├── playbooks/
 │   ├── configure-consul.yml
 │   ├── configure-nomad.yml
+│   ├── deploy-arr-stack.yml         # Deploy *arr services
 │   ├── deploy-csi-plugins.yml
 │   ├── deploy-csi-volumes.yml
 │   ├── deploy-media-server.yml
@@ -272,21 +370,36 @@ ansible-playbook -i inventory.ini playbooks/deploy-media-server.yml -e media_ser
 
 ```bash
 # Dispatch restore job directly
-NOMAD_ADDR=http://192.168.0.10:4646 nomad job dispatch restore-plex
+NOMAD_ADDR=http://192.168.0.10:4646 nomad job dispatch plex-restore
 
 # With specific backup date
-NOMAD_ADDR=http://192.168.0.10:4646 nomad job dispatch -meta backup_date=2025-01-15 restore-plex
+NOMAD_ADDR=http://192.168.0.10:4646 nomad job dispatch -meta backup_date=2025-01-15 plex-restore
 ```
 
 ### Manual Nomad Pack Deployment
 
 ```bash
+# Add registry
 NOMAD_ADDR=http://192.168.0.10:4646 nomad-pack registry add mediaserver github.com/brent-holden/nomad-mediaserver-packs
+
+# Deploy Plex
 NOMAD_ADDR=http://192.168.0.10:4646 nomad-pack run plex --registry=mediaserver \
-  -var gpu_transcoding=true \
-  -var enable_backup=true \
-  -var enable_update=true \
-  -var enable_restore=true
+  --var gpu_transcoding=true \
+  --var enable_backup=true \
+  --var enable_update=true \
+  --var enable_restore=true
+
+# Deploy *arr services
+NOMAD_ADDR=http://192.168.0.10:4646 nomad-pack run radarr --registry=mediaserver
+NOMAD_ADDR=http://192.168.0.10:4646 nomad-pack run sonarr --registry=mediaserver
+```
+
+### Trigger Manual Backup
+
+```bash
+# Trigger backup for any service
+NOMAD_ADDR=http://192.168.0.10:4646 nomad job periodic force plex-backup
+NOMAD_ADDR=http://192.168.0.10:4646 nomad job periodic force radarr-backup
 ```
 
 ## Troubleshooting
@@ -296,20 +409,28 @@ NOMAD_ADDR=http://192.168.0.10:4646 nomad-pack run plex --registry=mediaserver \
 ```bash
 NOMAD_ADDR=http://192.168.0.10:4646 nomad job status
 NOMAD_ADDR=http://192.168.0.10:4646 nomad job status plex
+NOMAD_ADDR=http://192.168.0.10:4646 nomad job status radarr
 ```
 
 ### View Logs
 
 ```bash
 NOMAD_ADDR=http://192.168.0.10:4646 nomad alloc logs -job plex
-NOMAD_ADDR=http://192.168.0.10:4646 nomad alloc logs -job backup-plex
+NOMAD_ADDR=http://192.168.0.10:4646 nomad alloc logs -job plex-backup
+NOMAD_ADDR=http://192.168.0.10:4646 nomad alloc logs -job radarr
 ```
 
 ### Check Volumes
 
 ```bash
+# List all volumes
 NOMAD_ADDR=http://192.168.0.10:4646 nomad volume status
+
+# List host volumes only
 NOMAD_ADDR=http://192.168.0.10:4646 nomad volume status -type host
+
+# List CSI volumes only
+NOMAD_ADDR=http://192.168.0.10:4646 nomad volume status -type csi
 ```
 
 ### Check CSI Plugin Health
@@ -318,13 +439,23 @@ NOMAD_ADDR=http://192.168.0.10:4646 nomad volume status -type host
 NOMAD_ADDR=http://192.168.0.10:4646 nomad plugin status cifs
 ```
 
+### Refresh Nomad Pack Registry
+
+If new packs have been added to the upstream repository:
+
+```bash
+NOMAD_ADDR=http://192.168.0.10:4646 nomad-pack registry delete mediaserver
+NOMAD_ADDR=http://192.168.0.10:4646 nomad-pack registry add mediaserver github.com/brent-holden/nomad-mediaserver-packs
+```
+
 ## Notes
 
-- Only one media server (Plex or Jellyfin) can be deployed at a time
+- Only one media server (Plex or Jellyfin) should be deployed at a time
 - GPU transcoding requires `/dev/dri` on the host
-- Backups are stored in `/backups/{plex,jellyfin}/YYYY-MM-DD/`
+- Backups are stored in `/backups/{service}/YYYY-MM-DD/`
 - Backup retention is 14 days by default
 - Dynamic host volumes require Nomad 1.10+
+- Job naming convention: `{service}-{type}` (e.g., `plex-backup`, `radarr-update`)
 
 ## Alternative: Existing Nomad Cluster
 
@@ -340,5 +471,5 @@ This creates volumes and deploys the media server without the full Ansible infra
 
 ## Related Repositories
 
-- [nomad-mediaserver-packs](https://github.com/brent-holden/nomad-mediaserver-packs) - Nomad Pack templates for Plex and Jellyfin (includes standalone `setup.sh` script)
+- [nomad-mediaserver-packs](https://github.com/brent-holden/nomad-mediaserver-packs) - Nomad Pack templates for Plex, Jellyfin, and *arr services
 - [nomad-csi-cifs](https://github.com/brent-holden/nomad-csi-cifs) - Standalone CSI CIFS/SMB plugin deployment for Nomad
