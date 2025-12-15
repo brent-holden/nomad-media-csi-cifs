@@ -207,6 +207,8 @@ When jobs request host volumes, Nomad creates them on-demand with the specified 
 | `plex-config` | Plex configuration and database | `deploy-media-server.yml` |
 | `jellyfin-config` | Jellyfin configuration and database | `deploy-media-server.yml` |
 
+**Access Mode:** Host volumes are created with `single-node-multi-writer` access mode, which allows the backup and restore jobs to access the config volume while the main media server is running.
+
 ## Jobs Deployed
 
 When you run `site.yml`, the following Nomad jobs are created:

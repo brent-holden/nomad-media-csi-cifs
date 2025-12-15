@@ -130,7 +130,7 @@
         type      = "host"
         plugin_id = "mkdir"
         capability {
-          access_mode     = "single-node-writer"
+          access_mode     = "single-node-multi-writer"
           attachment_mode = "file-system"
         }
         parameters {
@@ -153,7 +153,7 @@
         type      = "host"
         plugin_id = "mkdir"
         capability {
-          access_mode     = "single-node-writer"
+          access_mode     = "single-node-multi-writer"
           attachment_mode = "file-system"
         }
         parameters {
