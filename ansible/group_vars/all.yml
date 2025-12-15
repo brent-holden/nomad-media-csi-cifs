@@ -31,7 +31,7 @@ group_gid: 1001
 
 # CSI Plugin configuration
 csi_smb_image: "mcr.microsoft.com/k8s/csi/smb-csi:v1.8.0"
-csi_plugin_id: "smb"
+csi_plugin_id: "cifs"
 csi_driver_name: "smb.csi.k8s.io"
 csi_log_level: 5
 csi_controller_cpu: 512

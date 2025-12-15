@@ -300,7 +300,7 @@ NOMAD_ADDR=http://192.168.0.10:4646 nomad volume status -type host
 ### Check CSI Plugin Health
 
 ```bash
-NOMAD_ADDR=http://192.168.0.10:4646 nomad plugin status smb
+NOMAD_ADDR=http://192.168.0.10:4646 nomad plugin status cifs
 ```
 
 ## Notes
