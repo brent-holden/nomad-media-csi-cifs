@@ -11,7 +11,7 @@
         name:
           - dnf-plugins-core
         state: present
-      when: ansible_os_family == "RedHat"
+      when: ansible_facts['os_family'] == "RedHat"
 
     - name: Add HashiCorp repository (RHEL)
       ansible.builtin.yum_repository:
@@ -21,13 +21,13 @@
         enabled: true
         gpgcheck: true
         gpgkey: https://rpm.releases.hashicorp.com/gpg
-      when: ansible_os_family == "RedHat"
+      when: ansible_facts['os_family'] == "RedHat"
 
     - name: Install Consul (RHEL)
       ansible.builtin.dnf:
         name: consul
         state: latest
-      when: ansible_os_family == "RedHat"
+      when: ansible_facts['os_family'] == "RedHat"
 
     # Ubuntu/Debian tasks
     - name: Install required packages (Debian)
@@ -37,27 +37,27 @@
           - curl
         state: present
         update_cache: true
-      when: ansible_os_family == "Debian"
+      when: ansible_facts['os_family'] == "Debian"
 
     - name: Add HashiCorp GPG key (Debian)
       ansible.builtin.apt_key:
         url: https://apt.releases.hashicorp.com/gpg
         state: present
-      when: ansible_os_family == "Debian"
+      when: ansible_facts['os_family'] == "Debian"
 
     - name: Add HashiCorp repository (Debian)
       ansible.builtin.apt_repository:
-        repo: "deb [arch=amd64] https://apt.releases.hashicorp.com {{ ansible_distribution_release }} main"
+        repo: "deb [arch=amd64] https://apt.releases.hashicorp.com {{ ansible_facts['distribution_release'] }} main"
         state: present
         filename: hashicorp
-      when: ansible_os_family == "Debian"
+      when: ansible_facts['os_family'] == "Debian"
 
     - name: Install Consul (Debian)
       ansible.builtin.apt:
         name: consul
         state: latest
         update_cache: true
-      when: ansible_os_family == "Debian"
+      when: ansible_facts['os_family'] == "Debian"
 
     # Common tasks
     - name: Create Consul data directory

@@ -11,13 +11,13 @@
         name:
           - podman
         state: present
-      when: ansible_os_family == "RedHat"
+      when: ansible_facts['os_family'] == "RedHat"
 
     - name: Install nomad-driver-podman (RHEL)
       ansible.builtin.dnf:
         name: nomad-driver-podman
         state: latest
-      when: ansible_os_family == "RedHat"
+      when: ansible_facts['os_family'] == "RedHat"
 
     # Ubuntu/Debian tasks
     - name: Install Podman (Debian)
@@ -26,14 +26,14 @@
           - podman
         state: present
         update_cache: true
-      when: ansible_os_family == "Debian"
+      when: ansible_facts['os_family'] == "Debian"
 
     - name: Install nomad-driver-podman (Debian)
       ansible.builtin.apt:
         name: nomad-driver-podman
         state: latest
         update_cache: true
-      when: ansible_os_family == "Debian"
+      when: ansible_facts['os_family'] == "Debian"
 
     # Common tasks
     - name: Enable and start Podman socket

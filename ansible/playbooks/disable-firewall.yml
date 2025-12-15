@@ -11,14 +11,14 @@
         name: firewalld
         enabled: false
         state: stopped
-      when: ansible_os_family == "RedHat"
+      when: ansible_facts['os_family'] == "RedHat"
       ignore_errors: true
 
     # Ubuntu/Debian tasks
     - name: Disable ufw (Debian)
       community.general.ufw:
         state: disabled
-      when: ansible_os_family == "Debian"
+      when: ansible_facts['os_family'] == "Debian"
       ignore_errors: true
 
     - name: Stop and disable ufw service (Debian)
@@ -26,5 +26,5 @@
         name: ufw
         enabled: false
         state: stopped
-      when: ansible_os_family == "Debian"
+      when: ansible_facts['os_family'] == "Debian"
       ignore_errors: true
