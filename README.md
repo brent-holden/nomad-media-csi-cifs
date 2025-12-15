@@ -168,6 +168,17 @@ nomad_config_dir: "/etc/nomad.d"
 nomad_plugin_dir: "/opt/nomad/plugins"
 ```
 
+### CSI Plugin Settings
+
+```yaml
+# CSI plugin configuration
+csi_smb_image: "mcr.microsoft.com/k8s/csi/smb-csi:v1.8.0"  # Microsoft's SMB CSI driver image
+csi_plugin_id: "cifs"                                       # Plugin ID used in Nomad (volumes reference this)
+csi_driver_name: "smb.csi.k8s.io"                           # Driver name (from upstream)
+```
+
+**Note:** The plugin ID is `cifs` for clarity, while the underlying driver uses Microsoft's `smb.csi.k8s.io` implementation. Volumes reference the plugin by `csi_plugin_id` (i.e., `plugin_id = "cifs"`).
+
 ## Storage Architecture
 
 ### CSI Volumes (Network Storage)
