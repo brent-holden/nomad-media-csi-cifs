@@ -10,6 +10,7 @@ fileserver_password: "Eitho7oo"
 consul_data_dir: "/opt/consul/data"
 consul_config_dir: "/etc/consul.d"
 consul_datacenter: "dc1"
+consul_bind_addr: "192.168.0.10"
 
 # Nomad configuration
 nomad_addr: "http://192.168.0.10:4646"
