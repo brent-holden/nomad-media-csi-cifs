@@ -322,6 +322,18 @@ NOMAD_ADDR=http://192.168.0.10:4646 nomad plugin status cifs
 - Backup retention is 14 days by default
 - Dynamic host volumes require Nomad 1.10+
 
+## Alternative: Existing Nomad Cluster
+
+If you already have a working Nomad cluster with the CSI plugin deployed, you can use the `setup.sh` script from the packs repository instead:
+
+```bash
+git clone https://github.com/brent-holden/nomad-mediaserver-packs.git
+cd nomad-mediaserver-packs
+NOMAD_ADDR=http://192.168.0.10:4646 FILESERVER_PASSWORD=secret ./setup.sh plex
+```
+
+This creates volumes and deploys the media server without the full Ansible infrastructure setup.
+
 ## Related Repositories
 
-- [nomad-mediaserver-packs](https://github.com/brent-holden/nomad-mediaserver-packs) - Nomad Pack templates for Plex and Jellyfin
+- [nomad-mediaserver-packs](https://github.com/brent-holden/nomad-mediaserver-packs) - Nomad Pack templates for Plex and Jellyfin (includes standalone `setup.sh` script)
