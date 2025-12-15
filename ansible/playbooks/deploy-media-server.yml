@@ -76,6 +76,7 @@
           -var gpu_transcoding={{ media_server_gpu_transcoding | lower }}
           -var enable_backup={{ media_server_enable_backup | lower }}
           -var enable_update={{ media_server_enable_update | lower }}
+          -var enable_restore={{ media_server_enable_restore | lower }}
 
     # Create CSI volumes for network storage
     - name: Create temporary directory for volume configs
